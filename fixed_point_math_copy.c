@@ -7,7 +7,7 @@ Gabriel Staples
 www.ElectricRCAircraftGuy.com
 - email available via the Contact Me link at the top of my website.
 Started: 22 Dec. 2018 
-Updated: 24 Dec. 2018 
+Updated: 25 Dec. 2018 
 
 References:
 - https://stackoverflow.com/questions/10067510/fixed-point-arithmetic-in-c-programming
@@ -15,9 +15,9 @@ References:
 Compile & Run:
 As a C program (the file must NOT have a C++ file extension or it will be automatically compiled as C++):
 See here: https://stackoverflow.com/a/3206195/4561887. 
-    cp fixed_point_math8.cpp fixed_point_math8_copy.c && gcc -Wall -std=c99 -o fixed_point_math8_c fixed_point_math8_copy.c && ./fixed_point_math8_c
+    cp fixed_point_math.cpp fixed_point_math_copy.c && gcc -Wall -std=c99 -o ./bin/fixed_point_math_c fixed_point_math_copy.c && ./bin/fixed_point_math_c
 As a C++ program:
-    g++ -Wall -o fixed_point_math8_cpp fixed_point_math8.cpp && ./fixed_point_math8_cpp
+    g++ -Wall -o ./bin/fixed_point_math_cpp fixed_point_math.cpp && ./bin/fixed_point_math_cpp
 
 */
 
@@ -151,7 +151,7 @@ int main(int argc, char * argv[])
 
     printf("WITH MANUAL INTEGER-BASED ROUNDING:\n");
 
-    // Calculate addends used for rounding.
+    // Calculate addends used for rounding (see definition of "addend" above).
     fixed_point_t addend0 = FRACTION_DIVISOR/2;
     fixed_point_t addend1 = FRACTION_DIVISOR/20;
     fixed_point_t addend2 = FRACTION_DIVISOR/200;
@@ -283,6 +283,20 @@ int main(int argc, char * argv[])
     // // ERROR: Floating point exception (core dumped) :(
     // // printf("1.8e19 * 99999/900000 = %L\n", (long double)1.8e19*99999.0/900000.0); 
     // printf("num64 = %lu\n", num64);
+
+    num8 = 245;
+    num8_upper4 = num8 >> 4;
+    num8_lower4 = num8 & 0x0F;
+    printf("245 * 99/127 = %u\n", 245*99/127);
+    printf("num8 = %u, num8_upper4 = %u, num8_lower4 = %u\n", num8, num8_upper4, num8_lower4);
+    num8_upper4 *= 99 >> 4;
+    num8_lower4 *= 99 & 0x0F;
+    printf("num8_upper4 = %u, num8_lower4 = %u\n", num8_upper4, num8_lower4);
+    num8_upper4 /= 127 >> 4;
+    num8_lower4 /= 127 & 0x0F;
+    printf("num8_upper4 = %u, num8_lower4 = %u\n", num8_upper4, num8_lower4);
+    num8 = (num8_upper4 << 4) + num8_lower4;
+    printf("num8 = %u, num8_upper4 = %u, num8_lower4 = %u\n\n", num8, num8_upper4, num8_lower4); // FAILED
 
 
     return 0;

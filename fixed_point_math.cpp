@@ -7,7 +7,7 @@ Gabriel Staples
 www.ElectricRCAircraftGuy.com
 - email available via the Contact Me link at the top of my website.
 Started: 22 Dec. 2018 
-Updated: 24 Dec. 2018 
+Updated: 25 Dec. 2018 
 
 References:
 - https://stackoverflow.com/questions/10067510/fixed-point-arithmetic-in-c-programming
@@ -15,9 +15,9 @@ References:
 Compile & Run:
 As a C program (the file must NOT have a C++ file extension or it will be automatically compiled as C++):
 See here: https://stackoverflow.com/a/3206195/4561887. 
-    cp fixed_point_math8.cpp fixed_point_math8_copy.c && gcc -Wall -std=c99 -o fixed_point_math8_c fixed_point_math8_copy.c && ./fixed_point_math8_c
+    cp fixed_point_math.cpp fixed_point_math_copy.c && gcc -Wall -std=c99 -o ./bin/fixed_point_math_c fixed_point_math_copy.c && ./bin/fixed_point_math_c
 As a C++ program:
-    g++ -Wall -o fixed_point_math8_cpp fixed_point_math8.cpp && ./fixed_point_math8_cpp
+    g++ -Wall -o ./bin/fixed_point_math_cpp fixed_point_math.cpp && ./bin/fixed_point_math_cpp
 
 */
 

@@ -13,7 +13,8 @@ References:
 - https://stackoverflow.com/questions/10067510/fixed-point-arithmetic-in-c-programming
 
 Compile & Run:
-As a C program (the file must NOT have a C++ file extension or it will be automatically compiled as C++):
+As a C program (the file must NOT have a C++ file extension or it will be automatically compiled as C++, so we will
+make a copy of it and change the file extension to .c first):
 See here: https://stackoverflow.com/a/3206195/4561887. 
     cp fixed_point_math.cpp fixed_point_math_copy.c && gcc -Wall -std=c99 -o ./bin/fixed_point_math_c fixed_point_math_copy.c && ./bin/fixed_point_math_c
 As a C++ program:
@@ -186,80 +187,105 @@ int main(int argc, char * argv[])
            price_rounded3 >> FRACTION_BITS, (uint64_t)(price_rounded3 & FRACTION_MASK) * 1000 / FRACTION_DIVISOR); 
     printf("rounded price (manual float, rounded to 4 digits after decimal) is %u.%04lu.\n", 
            price_rounded4 >> FRACTION_BITS, (uint64_t)(price_rounded4 & FRACTION_MASK) * 10000 / FRACTION_DIVISOR); 
-    printf("rounded price (manual float, rounded to 5 digits after decimal) is %u.%05lu.\n\n", 
+    printf("rounded price (manual float, rounded to 5 digits after decimal) is %u.%05lu.\n", 
            price_rounded5 >> FRACTION_BITS, (uint64_t)(price_rounded5 & FRACTION_MASK) * 100000 / FRACTION_DIVISOR); 
 
+
+    // =================================================================================================================
 
     // RELATED CONCEPTS:
     // Now let's practice handling large types.
     // Let's say my goal is to multiply a number by a fraction < 1 withOUT it ever growing into a larger type.
 
-    // Small-scale example: use only uint8_t types instead of growing to uint16_t.
-    // Do 250 * 249/251. Answer should be: 248.007968127, which truncates to 248.
-    // The intermediate step is 250 * 249 = 62250 (0b 1111 0011 0010 1010), but I want to store that into 2 uint8_ts
-    // instead of one uint16_t, with the ultimate goal of expanding this example to use 2 uint64_ts instead of 1 
-    // uint128_t, which is a type my target system does NOT support.
-    uint8_t num8 = 250;
-    uint8_t num8_upper4 = num8 >> 4;
-    uint8_t num8_lower4 = num8 & 0x0F;
-    printf("250 * 249/251 = %u\n", 250*249/251);
-    printf("num8 = %u, num8_upper4 = %u, num8_lower4 = %u\n", num8, num8_upper4, num8_lower4);
-    num8_upper4 *= 249 >> 4;
-    num8_lower4 *= 249 & 0x0F;
-    printf("num8_upper4 = %u, num8_lower4 = %u\n", num8_upper4, num8_lower4);
-    num8_upper4 /= 251 >> 4;
-    num8_lower4 /= 251 & 0x0F;
-    printf("num8_upper4 = %u, num8_lower4 = %u\n", num8_upper4, num8_lower4);
-    num8 = (num8_upper4 << 4) + num8_lower4;
-    printf("num8 = %u, num8_upper4 = %u, num8_lower4 = %u\n\n", num8, num8_upper4, num8_lower4); // GOOD! IT WORKED!
-    // UPDATE: ACTUALLY IT FAILED! IT JUST LOOKS LIKE IT WORKED FOR THIS ONE CASE.
+    // Goal: Use 16-bit values only to find 65401 * 16/127.
+    // Result:
+    // AWESOME! Bot approaches work. 2ND APPROACH WORKS WELL! NOTE THAT 16 IS THE HIGHEST *TIMES* VALUE I CAN USE SINCE 
+    // 2^16/0b1111,1111,0000 = 65536/4080 = 16.0627.
+    uint16_t num16 = 65401; // 1111 1111 0111 1001 
+    uint16_t times = 16;
+    uint16_t divide = 127;
+    // First, let's cheat by letting it grow into a larger type. Multiply first to avoid losing resolution.
+    printf("\n%u * %u/%u = %u. <== true answer\n", num16, times, divide, (uint32_t)num16*times/divide);
+    // 1st approach: just divide first, and lose precision right from the start.
+    uint16_t num16_result = num16/divide * times;
+    printf("1st approach:\n");
+    printf("num16_result = %u. <== Loses bits that right-shift out during the initial divide.\n", num16_result);
+    // 2nd approach: place all 8 bits to the far right
+    uint16_t num16_upper8 = num16 >> 8; // 1111 1111
+    uint16_t num16_lower8 = num16 & 0xFF; // 0111 1001
+    num16_upper8 *= times;
+    num16_lower8 *= times;
+    num16_upper8 /= divide;
+    num16_lower8 /= divide;
+    num16_result = (num16_upper8 << 8) + num16_lower8;
+    printf("num16_result = %u. <== Loses bits that right-shift out during the divide, but is close.\n", num16_result);
+    // 2nd approach: place all 8 bits in the *center*, with 4 on the left to grow when multiplying and 4 on the right
+    // to not lose as many bits when dividing. This will help stop the lose of resolution when we divide.
+    num16_upper8 = (num16 >> 4) & 0x0FF0;
+    num16_lower8 = (num16 << 4) & 0x0FF0;
+    num16_upper8 *= times;
+    num16_lower8 *= times;
+    num16_upper8 /= divide;
+    num16_lower8 /= divide;
+    num16_result = (num16_upper8 << 4) + (num16_lower8 >> 4);
+    printf("num16_result = %u. <== Perfect! Retains the bits that right-shift during the divide.\n", num16_result);
 
-    num8 = 245;
-    num8_upper4 = num8 >> 4;
-    num8_lower4 = num8 & 0x0F;
-    printf("245 * 99/127 = %u\n", 245*99/127);
-    printf("num8 = %u, num8_upper4 = %u, num8_lower4 = %u\n", num8, num8_upper4, num8_lower4);
-    num8_upper4 *= 99 >> 4;
-    num8_lower4 *= 99 & 0x0F;
-    printf("num8_upper4 = %u, num8_lower4 = %u\n", num8_upper4, num8_lower4);
-    num8_upper4 /= 127 >> 4;
-    num8_lower4 /= 127 & 0x0F;
-    printf("num8_upper4 = %u, num8_lower4 = %u\n", num8_upper4, num8_lower4);
-    num8 = (num8_upper4 << 4) + num8_lower4;
-    printf("num8 = %u, num8_upper4 = %u, num8_lower4 = %u\n\n", num8, num8_upper4, num8_lower4); // FAILED
+    // 2ND APPROACH DOESN'T WORK! OVERFLOWS since times > 16! NOTE THAT 16 IS THE HIGHEST *TIMES* VALUE I CAN USE SINCE 
+    // 2^16/0b1111,1111,0000 = 65536/4080 = 16.0627.
+    num16 = 65401; // 1111 1111 0111 1001 
+    times = 99;
+    divide = 127;
+    printf("\n%u * %u/%u = %u. <== true answer\n", num16, times, divide, (uint32_t)num16*times/divide);
+    // 1st approach: place all 8 bits to the far right
+    num16_upper8 = num16 >> 8; // 1111 1111
+    num16_lower8 = num16 & 0xFF; // 0111 1001
+    num16_upper8 *= times;
+    num16_lower8 *= times;
+    num16_upper8 /= divide;
+    num16_lower8 /= divide;
+    num16_result = (num16_upper8 << 8) + num16_lower8;
+    printf("num16_result = %u. <== Loses bits that right-shift out during the divide, but is close.\n", num16_result);
+    // 2nd approach: place all 8 bits in the *center*, with 4 on the left to grow when multiplying and 4 on the right
+    // to not lose as many bits when dividing. This will help stop the lose of resolution when we divide.
+    num16_upper8 = (num16 >> 4) & 0x0FF0;
+    num16_lower8 = (num16 << 4) & 0x0FF0;
+    num16_upper8 *= times;
+    num16_lower8 *= times;
+    num16_upper8 /= divide;
+    num16_lower8 /= divide;
+    num16_result = (num16_upper8 << 4) + (num16_lower8 >> 4);
+    printf("num16_result = %u. <== Completely wrong since it overflows during the multiply!\n", num16_result);
 
-    // Now let's do something similar with forced 128-bit types:
-    uint64_t num64 = 18000000000000000000UL; // 1.8e19; Note: max uint64_t is 1.8446744e+19.
-    // Let's do num64 x 99999/900000. Ans: 1.8e19 x 99999/900000 = 1.99998e+18. The intermediate step, 
-    // 1.8e19 x 99999 = 1.799982e+24, however, is way too big to store into a uint64_t, so I'll have to 
-    // emulate uint128_t types since my target system doesn't natively support them. 
-    printf("num64 = %lu, num64 as hex = 0x%lX\n", num64, num64);
-    uint64_t num64_upper32 = num64 >> 32;
-    uint64_t num64_lower32 = num64 & 0xFFFFFFFF;
-    printf("num64_upper32 = 0x%lX, num64_lower32 = 0x%lX\n", num64_upper32, num64_lower32);
+    // num8_1 = 245 & 
+    // num8_upper4 = num8 >> 4;
+    // num8_lower4 = num8 & 0x0F;
+    // printf("245 * 99/127 = %u\n", 245*99/127);
+    // printf("num8 = %u, num8_upper4 = %u, num8_lower4 = %u\n", num8, num8_upper4, num8_lower4);
+    // num8_upper4 *= 99 >> 4;
+    // num8_lower4 *= 99 & 0x0F;
+    // printf("num8_upper4 = %u, num8_lower4 = %u\n", num8_upper4, num8_lower4);
+    // num8_upper4 /= 127 >> 4;
+    // num8_lower4 /= 127 & 0x0F;
+    // printf("num8_upper4 = %u, num8_lower4 = %u\n", num8_upper4, num8_lower4);
+    // num8 = (num8_upper4 << 4) + num8_lower4;
+    // printf("num8 = %u, num8_upper4 = %u, num8_lower4 = %u\n\n", num8, num8_upper4, num8_lower4); // FAILED
 
-    num64_upper32 *= 99999UL >> 32;
-    // printf("%lu\n", 99999UL >> 32);
-    num64_lower32 *= 99999UL & 0xFFFFFFFF;
-    printf("num64_upper32 = 0x%lX, num64_lower32 = 0x%lX\n", num64_upper32, num64_lower32);
-    // printf("num64 = %lu, num64_upper32 = %lu, num64_lower32 = %lu\n", num64, num64_upper32, num64_lower32);
-    
-    // num64_upper32 /= 900000UL >> 32; /////////DON'T DIVIDE BY ZERO!/////
-    num64_lower32 /= 900000UL & 0xFFFFFFFF;
-    printf("num64_upper32 = 0x%lX, num64_lower32 = 0x%lX\n", num64_upper32, num64_lower32);
-    // printf("num64 = %lu, num64_upper32 = %lu, num64_lower32 = %lu\n", num64, num64_upper32, num64_lower32);
+    // num8 = 245;
+    // num8_upper4 = num8 >> 4;
+    // num8_lower4 = num8 & 0x0F;
+    // printf("245 * 99/127 = %u\n", 245*99/127);
+    // printf("num8 = %u, num8_upper4 = %u, num8_lower4 = %u\n", num8, num8_upper4, num8_lower4);
+    // num8_upper4 *= 99 >> 4;
+    // num8_lower4 *= 99 & 0x0F;
+    // printf("num8_upper4 = %u, num8_lower4 = %u\n", num8_upper4, num8_lower4);
+    // num8_upper4 /= 127 >> 4;
+    // num8_lower4 /= 127 & 0x0F;
+    // printf("num8_upper4 = %u, num8_lower4 = %u\n", num8_upper4, num8_lower4);
+    // num8 = (num8_upper4 << 4) + num8_lower4;
+    // printf("num8 = %u, num8_upper4 = %u, num8_lower4 = %u\n\n", num8, num8_upper4, num8_lower4); // FAILED
 
-    num64 = (num64_upper32 << 32) + num64_lower32;
-    // ERROR: Floating point exception (core dumped) :(
-    // printf("1.8e19 * 99999/900000 = %L\n", (long double)1.8e19*99999.0/900000.0); 
-    printf("num64 = %lu\n", num64);
-
-    ///////////////////////
-    // Now let's do something similar with forced 128-bit types:
-    num64 = 18000000000000000000UL; // 1.8e19; Note: max uint64_t is 1.8446744e+19.
-    num64 = (__uint128_t)num64*(__uint128_t)99999/(__uint128_t)900000;
-    printf("num64 = %lu\n", num64);
-
+    // // Now let's do something similar with forced 128-bit types:
+    // uint64_t num64 = 18000000000000000000UL; // 1.8e19; Note: max uint64_t is 1.8446744e+19.
     // // Let's do num64 x 99999/900000. Ans: 1.8e19 x 99999/900000 = 1.99998e+18. The intermediate step, 
     // // 1.8e19 x 99999 = 1.799982e+24, however, is way too big to store into a uint64_t, so I'll have to 
     // // emulate uint128_t types since my target system doesn't natively support them. 
@@ -284,19 +310,49 @@ int main(int argc, char * argv[])
     // // printf("1.8e19 * 99999/900000 = %L\n", (long double)1.8e19*99999.0/900000.0); 
     // printf("num64 = %lu\n", num64);
 
-    num8 = 245;
-    num8_upper4 = num8 >> 4;
-    num8_lower4 = num8 & 0x0F;
-    printf("245 * 99/127 = %u\n", 245*99/127);
-    printf("num8 = %u, num8_upper4 = %u, num8_lower4 = %u\n", num8, num8_upper4, num8_lower4);
-    num8_upper4 *= 99 >> 4;
-    num8_lower4 *= 99 & 0x0F;
-    printf("num8_upper4 = %u, num8_lower4 = %u\n", num8_upper4, num8_lower4);
-    num8_upper4 /= 127 >> 4;
-    num8_lower4 /= 127 & 0x0F;
-    printf("num8_upper4 = %u, num8_lower4 = %u\n", num8_upper4, num8_lower4);
-    num8 = (num8_upper4 << 4) + num8_lower4;
-    printf("num8 = %u, num8_upper4 = %u, num8_lower4 = %u\n\n", num8, num8_upper4, num8_lower4); // FAILED
+    // ///////////////////////
+    // // Now let's do something similar with forced 128-bit types:
+    // num64 = 18000000000000000000UL; // 1.8e19; Note: max uint64_t is 1.8446744e+19.
+    // num64 = (__uint128_t)num64*(__uint128_t)99999/(__uint128_t)900000;
+    // printf("num64 = %lu\n", num64);
+
+    // // // Let's do num64 x 99999/900000. Ans: 1.8e19 x 99999/900000 = 1.99998e+18. The intermediate step, 
+    // // // 1.8e19 x 99999 = 1.799982e+24, however, is way too big to store into a uint64_t, so I'll have to 
+    // // // emulate uint128_t types since my target system doesn't natively support them. 
+    // // printf("num64 = %lu, num64 as hex = 0x%lX\n", num64, num64);
+    // // uint64_t num64_upper32 = num64 >> 32;
+    // // uint64_t num64_lower32 = num64 & 0xFFFFFFFF;
+    // // printf("num64_upper32 = 0x%lX, num64_lower32 = 0x%lX\n", num64_upper32, num64_lower32);
+
+    // // num64_upper32 *= 99999UL >> 32;
+    // // // printf("%lu\n", 99999UL >> 32);
+    // // num64_lower32 *= 99999UL & 0xFFFFFFFF;
+    // // printf("num64_upper32 = 0x%lX, num64_lower32 = 0x%lX\n", num64_upper32, num64_lower32);
+    // // // printf("num64 = %lu, num64_upper32 = %lu, num64_lower32 = %lu\n", num64, num64_upper32, num64_lower32);
+    
+    // // // num64_upper32 /= 900000UL >> 32; /////////DON'T DIVIDE BY ZERO!/////
+    // // num64_lower32 /= 900000UL & 0xFFFFFFFF;
+    // // printf("num64_upper32 = 0x%lX, num64_lower32 = 0x%lX\n", num64_upper32, num64_lower32);
+    // // // printf("num64 = %lu, num64_upper32 = %lu, num64_lower32 = %lu\n", num64, num64_upper32, num64_lower32);
+
+    // // num64 = (num64_upper32 << 32) + num64_lower32;
+    // // // ERROR: Floating point exception (core dumped) :(
+    // // // printf("1.8e19 * 99999/900000 = %L\n", (long double)1.8e19*99999.0/900000.0); 
+    // // printf("num64 = %lu\n", num64);
+
+    // num8 = 245;
+    // num8_upper4 = num8 >> 4;
+    // num8_lower4 = num8 & 0x0F;
+    // printf("245 * 99/127 = %u\n", 245*99/127);
+    // printf("num8 = %u, num8_upper4 = %u, num8_lower4 = %u\n", num8, num8_upper4, num8_lower4);
+    // num8_upper4 *= 99 >> 4;
+    // num8_lower4 *= 99 & 0x0F;
+    // printf("num8_upper4 = %u, num8_lower4 = %u\n", num8_upper4, num8_lower4);
+    // num8_upper4 /= 127 >> 4;
+    // num8_lower4 /= 127 & 0x0F;
+    // printf("num8_upper4 = %u, num8_lower4 = %u\n", num8_upper4, num8_lower4);
+    // num8 = (num8_upper4 << 4) + num8_lower4;
+    // printf("num8 = %u, num8_upper4 = %u, num8_lower4 = %u\n\n", num8, num8_upper4, num8_lower4); // FAILED
 
 
     return 0;

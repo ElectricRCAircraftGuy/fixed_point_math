@@ -215,7 +215,8 @@ int main(int argc, char * argv[])
     // -----------------------------------------------------
     // EXAMPLE 1
     // Goal: Use only 16-bit values & math to find 65401 * 16/127.
-    // Result: Great! All 3 approaches work, with the 3rd being the best. 
+    // Result: Great! All 3 approaches work, with the 3rd being the best. To learn the techniques required for the 
+    // absolute best approach of all, take a look at the 8th approach in Example 2 below.
     // -----------------------------------------------------
     uint16_t num16 = 65401; // 1111 1111 0111 1001 
     uint16_t times = 16;
@@ -272,9 +273,10 @@ int main(int argc, char * argv[])
     // -----------------------------------------------------
     // EXAMPLE 2
     // Goal: Use only 16-bit values & math to find 65401 * 99/127.
-    // Result: ///////////
-    // 2ND APPROACH DOESN'T WORK! OVERFLOWS since times > 16! NOTE THAT 16 IS THE HIGHEST *TIMES* VALUE I CAN USE SINCE 
-    // 2^16/0b1111,1111,0000 = 65536/4080 = 16.0627.
+    // Result: Many approaches work, so long as enough bits exist to the left to not allow overflow during the 
+    // multiply. The best approach is the 8th one, however, which 1) right-shifts the minimum possible before the
+    // multiply, in order to retain as much resolution as possible, and 2) does integer rounding during the divide
+    // in order to be as accurate as possible. This is the best approach to use.
     // -----------------------------------------------------
     num16 = 65401; // 1111 1111 0111 1001 
     times = 99;
@@ -501,10 +503,47 @@ int main(int argc, char * argv[])
     printf("  num16_result = %u. <== [same as 6th approach] Loses the fewest possible bits that right-shift out "
            "during the divide.\n", num16_result);
 
-    ///////////////////////
-    // 8th approach: very similar to the 6th & 7th approaches, except retaining the fractional bits where able and 
-    // summing them *before* right-shifting and losing them again. THIS EFFECTIVELY DOES FRACTIONAL BIT ROUNDING,
-    // SIMILAR TO THE ROUNDING PRINCIPLES LEARNED ABOVE, AND IMPROVES THE ACCURACY EVEN FURTHER!////////
+    // 8th approach: very similar to the 7th approach, except doing rounding *during the division*.
+    // Reference my "eRCaGuy_analogReadXXbit.cpp" file here for info. on how this works:
+    // https://github.com/ElectricRCAircraftGuy/eRCaGuy_analogReadXXbit/blob/master/eRCaGuy_analogReadXXbit.cpp
+    // From my notes there:
+    /*Integer math rounding notes:
+    To do rounding with integers, during division, use the following formula:
+    (dividend + divisor/2)/divisor.
+
+    For example, instead of doing a/b, doing (a + b/2)/b will give you the integer value of a/b, rounded to the nearest
+    whole integer.  This only works perfectly for even values of b.  If b is odd, the rounding is imperfect, since b/2
+    will not yield a whole number.
+
+    Examples:
+
+    a = 1723; b = 16
+    a/b = 107.6875 --> truncated to 107
+    (a + b/2)/b = 108.1875 --> truncated to 108, which is the same thing as a/b rounded to the nearest whole integer
+
+    a = 1720; b = 16
+    a/b = 107.5 --> truncated to 107
+    (a + b/2)/b = 108 exactly, which is the same thing as a/b rounded to the nearest whole integer
+
+    a = 1719; b = 16
+    a/b = 107.4375 --> truncated to 107
+    (a + b/2)/b = 107.9375 --> truncated to 107, which is the same thing as a/b rounded to the nearest whole integer
+
+    Why does this work? 
+    If you do the algebra, you will see that doing (a + b/2)/b is the same thing as doing a/b + 1/2, which will always
+    force a value, when truncated, to truncate to the value that it otherwise would have rounded to. So, this works
+    perfectly!  The only problem is that 1/2 is not a valid integer (it truncates to 0), so you must instead do it in
+    the order of (a + b/2)/b, in order to make it all work out!
+    */
+
+    // - Looking at the rounding formula above, the highest *times* value I can use is calculated as follows:
+    // max_num*times + divide/2 < 2^16
+    // times < (2^16 - divide/2)/max_num, where max_num = 0b0000001000000000 and divide = 127 for this case.
+    // times < (2^16 - 127/2)/512 = (65536 - 63.5)/512 = 127.875977. This is a tiny bit lower than the 6th approach,
+    // where the max *times* value allowed is 128.
+    // NB: notice that the max *times* value here is also a function of the *divide* value we are using, as well as
+    // the max_num possible based on the number and location of bits we are using.
+
     // Right-shifting these bits gives us the additional *range* we need, at the sacrifice of resolution, 
     // so we still must do this since we need the range.
     num16_array[0] = (num16 >> 6) & 0b0000001000000000;
@@ -514,7 +553,9 @@ int main(int argc, char * argv[])
     num16_array[4] = (num16 >> 2) & 0b0000001000000000;
     num16_array[5] = (num16 >> 1) & 0b0000001000000000;
     // Left-shifting these bits gives us additional *fractional resolution*, at the sacrifice of *range*, 
-    // but so long as we maintain the minimal range required 
+    // but since we would just right-shift these in the end and lose the fractional resolution anyway, 
+    // there's really no benefit nor point in left-shifting these like we did before, so don't. Just bit-mask
+    // them in place instead.
     num16_array[6]  = num16 & 0b0000001000000000;
     num16_array[7]  = num16 & 0b0000000100000000;
     num16_array[8]  = num16 & 0b0000000010000000;
@@ -529,7 +570,9 @@ int main(int argc, char * argv[])
     for (uint8_t i = 0; i < 16; i++)
     {
         num16_array[i] *= times;
-        num16_array[i] /= divide;
+        // Don't forget to do integer rounding during the divide!
+        // Ie: instead of doing a/b, do (a + b/2)/b.
+        num16_array[i] = (num16_array[i] + divide/2)/divide;
     }
     // Now sum the result, taking care to only shift where required based on what we did above.
     num16_result = (num16_array[0] << 6) + (num16_array[1] << 5) + (num16_array[2] << 4) + (num16_array[3] << 3) +
@@ -538,111 +581,13 @@ int main(int argc, char * argv[])
     {
         num16_result += num16_array[i];
     }
-    printf("7th approach (split into 16 1-bit sub-numbers with bits skewed left):\n");
-    printf("  num16_result = %u. <== [same as 6th approach] Loses the fewest possible bits that right-shift out "
-           "during the divide.\n", num16_result);
-
-    // num8_1 = 245 & 
-    // num8_upper4 = num8 >> 4;
-    // num8_lower4 = num8 & 0x0F;
-    // printf("245 * 99/127 = %u\n", 245*99/127);
-    // printf("num8 = %u, num8_upper4 = %u, num8_lower4 = %u\n", num8, num8_upper4, num8_lower4);
-    // num8_upper4 *= 99 >> 4;
-    // num8_lower4 *= 99 & 0x0F;
-    // printf("num8_upper4 = %u, num8_lower4 = %u\n", num8_upper4, num8_lower4);
-    // num8_upper4 /= 127 >> 4;
-    // num8_lower4 /= 127 & 0x0F;
-    // printf("num8_upper4 = %u, num8_lower4 = %u\n", num8_upper4, num8_lower4);
-    // num8 = (num8_upper4 << 4) + num8_lower4;
-    // printf("num8 = %u, num8_upper4 = %u, num8_lower4 = %u\n\n", num8, num8_upper4, num8_lower4); // FAILED
-
-    // num8 = 245;
-    // num8_upper4 = num8 >> 4;
-    // num8_lower4 = num8 & 0x0F;
-    // printf("245 * 99/127 = %u\n", 245*99/127);
-    // printf("num8 = %u, num8_upper4 = %u, num8_lower4 = %u\n", num8, num8_upper4, num8_lower4);
-    // num8_upper4 *= 99 >> 4;
-    // num8_lower4 *= 99 & 0x0F;
-    // printf("num8_upper4 = %u, num8_lower4 = %u\n", num8_upper4, num8_lower4);
-    // num8_upper4 /= 127 >> 4;
-    // num8_lower4 /= 127 & 0x0F;
-    // printf("num8_upper4 = %u, num8_lower4 = %u\n", num8_upper4, num8_lower4);
-    // num8 = (num8_upper4 << 4) + num8_lower4;
-    // printf("num8 = %u, num8_upper4 = %u, num8_lower4 = %u\n\n", num8, num8_upper4, num8_lower4); // FAILED
-
-    // // Now let's do something similar with forced 128-bit types:
-    // uint64_t num64 = 18000000000000000000UL; // 1.8e19; Note: max uint64_t is 1.8446744e+19.
-    // // Let's do num64 x 99999/900000. Ans: 1.8e19 x 99999/900000 = 1.99998e+18. The intermediate step, 
-    // // 1.8e19 x 99999 = 1.799982e+24, however, is way too big to store into a uint64_t, so I'll have to 
-    // // emulate uint128_t types since my target system doesn't natively support them. 
-    // printf("num64 = %lu, num64 as hex = 0x%lX\n", num64, num64);
-    // uint64_t num64_upper32 = num64 >> 32;
-    // uint64_t num64_lower32 = num64 & 0xFFFFFFFF;
-    // printf("num64_upper32 = 0x%lX, num64_lower32 = 0x%lX\n", num64_upper32, num64_lower32);
-
-    // num64_upper32 *= 99999UL >> 32;
-    // // printf("%lu\n", 99999UL >> 32);
-    // num64_lower32 *= 99999UL & 0xFFFFFFFF;
-    // printf("num64_upper32 = 0x%lX, num64_lower32 = 0x%lX\n", num64_upper32, num64_lower32);
-    // // printf("num64 = %lu, num64_upper32 = %lu, num64_lower32 = %lu\n", num64, num64_upper32, num64_lower32);
-    
-    // // num64_upper32 /= 900000UL >> 32; /////////DON'T DIVIDE BY ZERO!/////
-    // num64_lower32 /= 900000UL & 0xFFFFFFFF;
-    // printf("num64_upper32 = 0x%lX, num64_lower32 = 0x%lX\n", num64_upper32, num64_lower32);
-    // // printf("num64 = %lu, num64_upper32 = %lu, num64_lower32 = %lu\n", num64, num64_upper32, num64_lower32);
-
-    // num64 = (num64_upper32 << 32) + num64_lower32;
-    // // ERROR: Floating point exception (core dumped) :(
-    // // printf("1.8e19 * 99999/900000 = %L\n", (long double)1.8e19*99999.0/900000.0); 
-    // printf("num64 = %lu\n", num64);
-
-    // ///////////////////////
-    // // Now let's do something similar with forced 128-bit types:
-    // num64 = 18000000000000000000UL; // 1.8e19; Note: max uint64_t is 1.8446744e+19.
-    // num64 = (__uint128_t)num64*(__uint128_t)99999/(__uint128_t)900000;
-    // printf("num64 = %lu\n", num64);
-
-    // // // Let's do num64 x 99999/900000. Ans: 1.8e19 x 99999/900000 = 1.99998e+18. The intermediate step, 
-    // // // 1.8e19 x 99999 = 1.799982e+24, however, is way too big to store into a uint64_t, so I'll have to 
-    // // // emulate uint128_t types since my target system doesn't natively support them. 
-    // // printf("num64 = %lu, num64 as hex = 0x%lX\n", num64, num64);
-    // // uint64_t num64_upper32 = num64 >> 32;
-    // // uint64_t num64_lower32 = num64 & 0xFFFFFFFF;
-    // // printf("num64_upper32 = 0x%lX, num64_lower32 = 0x%lX\n", num64_upper32, num64_lower32);
-
-    // // num64_upper32 *= 99999UL >> 32;
-    // // // printf("%lu\n", 99999UL >> 32);
-    // // num64_lower32 *= 99999UL & 0xFFFFFFFF;
-    // // printf("num64_upper32 = 0x%lX, num64_lower32 = 0x%lX\n", num64_upper32, num64_lower32);
-    // // // printf("num64 = %lu, num64_upper32 = %lu, num64_lower32 = %lu\n", num64, num64_upper32, num64_lower32);
-    
-    // // // num64_upper32 /= 900000UL >> 32; /////////DON'T DIVIDE BY ZERO!/////
-    // // num64_lower32 /= 900000UL & 0xFFFFFFFF;
-    // // printf("num64_upper32 = 0x%lX, num64_lower32 = 0x%lX\n", num64_upper32, num64_lower32);
-    // // // printf("num64 = %lu, num64_upper32 = %lu, num64_lower32 = %lu\n", num64, num64_upper32, num64_lower32);
-
-    // // num64 = (num64_upper32 << 32) + num64_lower32;
-    // // // ERROR: Floating point exception (core dumped) :(
-    // // // printf("1.8e19 * 99999/900000 = %L\n", (long double)1.8e19*99999.0/900000.0); 
-    // // printf("num64 = %lu\n", num64);
-
-    // num8 = 245;
-    // num8_upper4 = num8 >> 4;
-    // num8_lower4 = num8 & 0x0F;
-    // printf("245 * 99/127 = %u\n", 245*99/127);
-    // printf("num8 = %u, num8_upper4 = %u, num8_lower4 = %u\n", num8, num8_upper4, num8_lower4);
-    // num8_upper4 *= 99 >> 4;
-    // num8_lower4 *= 99 & 0x0F;
-    // printf("num8_upper4 = %u, num8_lower4 = %u\n", num8_upper4, num8_lower4);
-    // num8_upper4 /= 127 >> 4;
-    // num8_lower4 /= 127 & 0x0F;
-    // printf("num8_upper4 = %u, num8_lower4 = %u\n", num8_upper4, num8_lower4);
-    // num8 = (num8_upper4 << 4) + num8_lower4;
-    // printf("num8 = %u, num8_upper4 = %u, num8_lower4 = %u\n\n", num8, num8_upper4, num8_lower4); // FAILED
-
+    printf("[BEST APPROACH OF ALL] 8th approach (split into 16 1-bit sub-numbers with bits skewed left, "
+           "w/integer rounding during division):\n");
+    printf("  num16_result = %u. <== Loses the fewest possible bits that right-shift out during the divide, \n"
+           "  & has better accuracy due to rounding during the divide.\n", num16_result);
 
     return 0;
-}
+} // main
 
 // PRIVATE FUNCTION DEFINITIONS:
 

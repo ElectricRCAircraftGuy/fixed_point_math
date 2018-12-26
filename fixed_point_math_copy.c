@@ -456,6 +456,49 @@ int main(int argc, char * argv[])
     printf("  num16_result = %u. <== Loses the fewest possible bits that right-shift out during the divide.\n", 
            num16_result);
 
+    // 7th approach: exact same calculations and limitations and process as the 6th approach above, except
+    // done in a more optimized and maintainable way, thereby requiring fewer steps and less program space
+    // to calculate it.
+    uint16_t num16_array[16];
+    // Right-shifting these bits gives us the additional *range* we need, at the sacrifice of resolution, 
+    // so we still must do this since we need the range.
+    num16_array[0] = (num16 >> 6) & 0b0000001000000000;
+    num16_array[1] = (num16 >> 5) & 0b0000001000000000;
+    num16_array[2] = (num16 >> 4) & 0b0000001000000000;
+    num16_array[3] = (num16 >> 3) & 0b0000001000000000;
+    num16_array[4] = (num16 >> 2) & 0b0000001000000000;
+    num16_array[5] = (num16 >> 1) & 0b0000001000000000;
+    // Left-shifting these bits gives us additional *fractional resolution*, at the sacrifice of *range*, 
+    // but since we would just right-shift these in the end and lose the fractional resolution anyway, 
+    // there's really no benefit nor point in left-shifting these like we did before, so don't. Just bit-mask
+    // them in place instead.
+    num16_array[6]  = num16 & 0b0000001000000000;
+    num16_array[7]  = num16 & 0b0000000100000000;
+    num16_array[8]  = num16 & 0b0000000010000000;
+    num16_array[9]  = num16 & 0b0000000001000000;
+    num16_array[10] = num16 & 0b0000000000100000;
+    num16_array[11] = num16 & 0b0000000000010000;
+    num16_array[12] = num16 & 0b0000000000001000;
+    num16_array[13] = num16 & 0b0000000000000100;
+    num16_array[14] = num16 & 0b0000000000000010;
+    num16_array[15] = num16 & 0b0000000000000001;
+    // Now do all of the math in a single for loop.
+    for (uint8_t i = 0; i < 16; i++)
+    {
+        num16_array[i] *= times;
+        num16_array[i] /= divide;
+    }
+    // Now sum the result, taking care to only shift where required based on what we did above.
+    num16_result = (num16_array[0] << 6) + (num16_array[1] << 5) + (num16_array[2] << 4) + (num16_array[3] << 3) +
+                   (num16_array[4] << 2) + (num16_array[5] << 1);
+    for (uint8_t i = 6; i < 16; i++)
+    {
+        num16_result += num16_array[i];
+    }
+    printf("7th approach (split into 16 1-bit sub-numbers with bits skewed left):\n");
+    printf("  num16_result = %u. <== [same as 6th approach] Loses the fewest possible bits that right-shift out "
+           "during the divide.\n", num16_result);
+
     // num8_1 = 245 & 
     // num8_upper4 = num8 >> 4;
     // num8_lower4 = num8 & 0x0F;
